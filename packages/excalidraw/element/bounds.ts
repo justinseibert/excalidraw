@@ -25,6 +25,7 @@ import { LinearElementEditor } from "./linearElementEditor";
 import type { Mutable } from "../utility-types";
 import { ShapeCache } from "../scene/ShapeCache";
 import { arrayToMap } from "../utils";
+import Scene from "../scene/Scene";
 
 export type RectangleBox = {
   x: number;
@@ -76,10 +77,17 @@ export class ElementBounds {
     }
     const bounds = ElementBounds.calculateBounds(element, elementsMap);
 
-    ElementBounds.boundsCache.set(element, {
-      version: element.version,
-      bounds,
-    });
+    // hack to ensure that downstream checks could retrieve element Scene
+    // so as to have correctly calculated bounds
+    // FIXME remove when we get rid of all the id:Scene / element:Scene mapping
+    const shouldCache = Scene.getScene(element);
+
+    if (shouldCache) {
+      ElementBounds.boundsCache.set(element, {
+        version: element.version,
+        bounds,
+      });
+    }
 
     return bounds;
   }

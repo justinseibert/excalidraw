@@ -34,8 +34,8 @@ import {
   FILE_UPLOAD_MAX_BYTES,
   ROOM_ID_BYTES,
 } from "../app_constants";
+import { getStorageBackend } from "./config";
 import { encodeFilesForUpload } from "./FileManager";
-import { saveFilesToFirebase } from "./firebase";
 
 export type SyncableExcalidrawElement = OrderedExcalidrawElement &
   MakeBrand<"SyncableExcalidrawElement">;
@@ -66,6 +66,36 @@ const generateRoomId = async () => {
   const buffer = new Uint8Array(ROOM_ID_BYTES);
   window.crypto.getRandomValues(buffer);
   return bytesToHexString(buffer);
+};
+
+/**
+ * Right now the reason why we resolve connection params (url, polling...)
+ * from upstream is to allow changing the params immediately when needed without
+ * having to wait for clients to update the SW.
+ *
+ * If VITE_APP_WS_SERVER_URL env is set, we use that instead (useful for forks)
+ */
+export const getCollabServer = async (): Promise<{
+  url: string;
+  polling: boolean;
+}> => {
+  const wsServerURL = import.meta.env.VITE_APP_WS_SERVER_URL;
+  if (wsServerURL) {
+    return {
+      url: wsServerURL,
+      polling: true,
+    };
+  }
+
+  try {
+    const resp = await fetch(
+      `${import.meta.env.VITE_APP_PORTAL_URL}/collab-server`,
+    );
+    return await resp.json();
+  } catch (error) {
+    console.error(error);
+    throw new Error(t("errors.cannotResolveCollabServer"));
+  }
 };
 
 export type EncryptedData = {
@@ -316,7 +346,8 @@ export const exportToBackend = async (
       url.hash = `json=${json.id},${encryptionKey}`;
       const urlString = url.toString();
 
-      await saveFilesToFirebase({
+      const storageBackend = await getStorageBackend();
+      await storageBackend.saveFilesToStorageBackend({
         prefix: `/files/shareLinks/${json.id}`,
         files: filesToUpload,
       });
